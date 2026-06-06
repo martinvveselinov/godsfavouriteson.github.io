@@ -101,6 +101,12 @@ function touchOnMove(e) {
   const dx     = (t.clientX - touchLastX) * scaleX;
   player.x = Math.max(player.w / 2 + 4, Math.min(W - player.w / 2 - 4, player.x + dx));
   touchLastX = t.clientX;
+
+  // Keep nudging the AudioContext awake throughout a long drag — not just
+  // at the moment the finger first touches down. A click-and-drag session
+  // can last many seconds, plenty of time for an interruption (e.g. a
+  // volume-button press) to suspend audio mid-drag.
+  if (AC && AC.state === 'suspended') AC.resume().catch(() => {});
 }
 
 function touchOnEnd(e) {
@@ -129,13 +135,28 @@ if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
 // game can *feel* like it "completely stopped") doesn't come back on its
 // own even after the interruption ends and the page is visible again.
 function resumeAudioIfNeeded() {
-  if (AC && AC.state === 'suspended') AC.resume().catch(() => {});
+  if (!AC) return;
+  if (AC.state === 'suspended') {
+    AC.resume().catch(() => {});
+  } else if (AC.state === 'closed') {
+    // Some mobile browsers fully CLOSE the context on certain interruptions
+    // (rather than just suspending it) — resume() can't bring it back, so
+    // the only fix is to build a fresh one. getAC() does that for us.
+    AC = null;
+    getAC();
+  }
 }
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) resumeAudioIfNeeded();
 });
-window.addEventListener('focus', resumeAudioIfNeeded);
+window.addEventListener('focus',    resumeAudioIfNeeded);
 window.addEventListener('pageshow', resumeAudioIfNeeded);
+
+// Belt-and-suspenders: poll a few times a second. Some interruptions (e.g.
+// hardware volume-button presses on certain Android/iOS browsers) don't
+// reliably fire visibilitychange/focus events at all, so the listeners above
+// can miss them — a periodic check catches those too.
+setInterval(resumeAudioIfNeeded, 250);
 
 function handleMenuKey(code, key) {
   // ── PAUSE TOGGLE (P or Escape, while actively playing) ──────────
