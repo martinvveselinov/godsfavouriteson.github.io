@@ -1,5 +1,9 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+html, body {
+  height: 100%;
+}
+
 body {
   background: #020208;
   display: flex;
@@ -7,6 +11,7 @@ body {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
+  min-height: 100dvh;   /* dynamic viewport height — excludes mobile browser chrome */
   font-family: 'Courier New', monospace;
   overflow: hidden;
   user-select: none;
@@ -14,9 +19,12 @@ body {
 
 canvas {
   display: block;
-  /* Scale to fit any viewport while preserving the 600x750 aspect ratio */
+  /* Scale to fit any viewport while preserving the 600x750 aspect ratio.
+     Reserve a slice of height for the #hint line below so nothing gets
+     clipped by body's overflow:hidden on short mobile viewports. */
   max-width: 100vw;
   max-height: 100vh;
+  max-height: calc(100dvh - 28px);
   width: auto;
   height: auto;
   touch-action: none;             /* stop browser scroll/zoom from eating touches */
@@ -24,6 +32,14 @@ canvas {
   border: 2px solid #ff6a00;
   box-shadow: 0 0 50px #ff6a0044, 0 0 15px #ff6a0077;
   image-rendering: pixelated;
+}
+
+/* On narrow/short (mobile) screens, drop the keyboard-hint line entirely —
+   it competes with the canvas for vertical space and duplicates the
+   on-canvas touch instructions. */
+@media (max-width: 700px), (max-height: 500px) {
+  #hint { display: none; }
+  canvas { max-height: 100vh; max-height: 100dvh; }
 }
 
 /* Hidden helper input — focused programmatically on mobile to summon

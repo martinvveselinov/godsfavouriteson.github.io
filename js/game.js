@@ -19,10 +19,12 @@ let healthDrops  = [];
 
 // ── INPUT ─────────────────────────────────────────────────────────
 const keys = {};
-const nameInput = document.getElementById('nameInput');
+// Guarded with `|| null`: if index.html is ever out of sync and lacks
+// #nameInput, the rest of the game must still load instead of crashing here.
+const nameInput = document.getElementById('nameInput') || null;
 
 document.addEventListener('keydown', e => {
-  if (document.activeElement === nameInput) return; // hidden input handles its own keys (mobile name entry)
+  if (nameInput && document.activeElement === nameInput) return; // hidden input handles its own keys (mobile name entry)
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))
     e.preventDefault();
   if (!keys[e.code]) handleMenuKey(e.code, e.key);
@@ -35,23 +37,25 @@ document.addEventListener('keyup', e => { keys[e.code] = false; });
 // Tapping the name box (see touch handler below) focuses this invisible
 // input. Its value drives `typingName` directly so the existing NAME-screen
 // rendering and confirm/cancel flow keep working unchanged.
-nameInput.addEventListener('input', () => {
-  typingName = nameInput.value.toUpperCase().slice(0, 14);
-  nameInput.value = typingName;
-});
-nameInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    if (typingName.trim().length > 0) {
-      sfxMenu(); playerName = typingName.trim().toUpperCase();
+if (nameInput) {
+  nameInput.addEventListener('input', () => {
+    typingName = nameInput.value.toUpperCase().slice(0, 14);
+    nameInput.value = typingName;
+  });
+  nameInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (typingName.trim().length > 0) {
+        sfxMenu(); playerName = typingName.trim().toUpperCase();
+        nameInput.blur(); nameInput.value = ''; typingName = '';
+        startGame();
+      }
+    } else if (e.key === 'Escape') {
       nameInput.blur(); nameInput.value = ''; typingName = '';
-      startGame();
+      gameState = 'TITLE';
     }
-  } else if (e.key === 'Escape') {
-    nameInput.blur(); nameInput.value = ''; typingName = '';
-    gameState = 'TITLE';
-  }
-});
+  });
+}
 
 // ── TOUCH CONTROLS ────────────────────────────────────────────────
 // Gameplay: hold anywhere = continuous shoot, swipe left/right = move.
@@ -69,7 +73,7 @@ function touchOnStart(e) {
     touchLastX = t.clientX;
     keys['Space'] = true; // hold = shoot
 
-  } else if (gameState === 'NAME') {
+  } else if (gameState === 'NAME' && nameInput) {
     nameInput.value = typingName;
     nameInput.focus();
 
