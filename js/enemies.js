@@ -9,7 +9,7 @@ const ETYPES = {
 
   // ── SWARM: DELTA GUARD ─────────────────────────────────────────
   delta: {
-    hp:1, pts:8, w:36, h:46, col:'#334466',
+    hp:4, pts:8, w:36, h:46, col:'#334466',
     shoot(e) {
       if (e.state==='entering') return;
       if (Math.random() < 0.001*diffMult())
@@ -23,7 +23,7 @@ const ETYPES = {
 
   // ── SWARM: KURVA ───────────────────────────────────────────────
   kurva: {
-    hp:1, pts:12, w:34, h:44, col:'#cc2277',
+    hp:2, pts:12, w:34, h:44, col:'#cc2277',
     shoot(e) {
       if (e.state==='entering') return;
       if (Math.random() < 0.0014*diffMult()) {
