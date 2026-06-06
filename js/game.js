@@ -154,7 +154,7 @@ function handleMenuKey(code, key) {
     sfxMenu(); gameState = 'NAME'; typingName = '';
 
   } else if (gameState === 'TITLE' && code === 'KeyL') {
-    sfxMenu(); gameState = 'LEADERBOARD';
+    sfxMenu(); gameState = 'LEADERBOARD'; loadLeaderboard();
 
   } else if (gameState === 'NAME') {
     if (code === 'Enter' && typingName.trim().length > 0) {
@@ -168,10 +168,10 @@ function handleMenuKey(code, key) {
     }
 
   } else if (gameState === 'GAMEOVER' && (code === 'Enter' || code === 'Space')) {
-    sfxMenu(); saveScore().then(() => { gameState = 'LEADERBOARD'; });
+    sfxMenu(); saveScore().then(() => { gameState = 'LEADERBOARD'; loadLeaderboard(); });
 
   } else if (gameState === 'WIN' && (code === 'Enter' || code === 'Space')) {
-    sfxMenu(); saveScore().then(() => { gameState = 'LEADERBOARD'; });
+    sfxMenu(); saveScore().then(() => { gameState = 'LEADERBOARD'; loadLeaderboard(); });
 
   } else if (gameState === 'LEADERBOARD' && (code === 'Enter' || code === 'Space')) {
     sfxMenu(); gameState = 'TITLE';
@@ -197,22 +197,27 @@ async function saveScore() {
   localStorage.setItem('stoyanScores', JSON.stringify(scores));
   try {
     await firebase.database().ref('leaderboard').push({ name: playerName, score, date: Date.now() });
-    onlineScores = null;
   } catch (e) {}
 }
 
+let fetchAttempted = false;
+
 async function fetchOnlineScores() {
   if (onlineScores) return onlineScores;
+  if (fetchAttempted) return null;
+  fetchAttempted = true;
   try {
-    const snap = await firebase.database().ref('leaderboard')
-      .orderByChild('score').limitToLast(10).get();
+    const timeout = new Promise((_, rej) => setTimeout(() => rej('timeout'), 5000));
+    const query   = firebase.database().ref('leaderboard').get();
+    const snap = await Promise.race([query, timeout]);
     if (!snap.exists()) return null;
-    const entries = [];
-    snap.forEach(child => entries.push(child.val()));
+    const entries = Object.values(snap.val());
     entries.sort((a, b) => b.score - a.score);
-    onlineScores = entries;
-    return onlineScores;
-  } catch (e) { return null; }
+    onlineScores = entries.slice(0, 10);
+  } catch (e) {
+    console.error('[Firebase] Fetch failed:', e);
+  }
+  return onlineScores;
 }
 
 // ── MAIN UPDATE LOOP ──────────────────────────────────────────────
