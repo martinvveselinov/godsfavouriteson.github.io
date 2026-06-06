@@ -2,6 +2,14 @@
 //  SCREENS — all draw functions for each game state
 // =================================================================
 
+(function testPush() {
+  const entry = { name: 'TEST_' + Date.now(), score: Math.floor(Math.random() * 1000), date: Date.now() };
+  firebase.database().ref('leaderboard').push(entry)
+    .then(() => console.log('[FB TEST] Push OK:', entry))
+    .catch(e => console.error('[FB TEST] Push FAILED:', e));
+})();
+
+
 function txt(t, x, y, size, col, align = 'center', glow = '') {
   ctx.font = `bold ${size}px 'Courier New', monospace`;
   ctx.textAlign = align;
@@ -243,17 +251,39 @@ function drawWin() {
 }
 
 // ── LEADERBOARD ───────────────────────────────────────────────────
-async function drawLeaderboard() {
+let lbData   = null; // locked snapshot used by drawLeaderboard
+let lbOnline = false;
+
+function loadLeaderboard() {
+  lbData        = null;
+  lbOnline      = false;
+  onlineScores  = null;
+  fetchAttempted = false;
+  fetchOnlineScores().then(result => {
+    lbData   = result || scores;
+    lbOnline = !!result;
+    console.log('[LB] locked data:', lbData);
+  });
+}
+
+function drawLeaderboard() {
   ctx.fillStyle = C_BG; ctx.fillRect(0, 0, W, H);
   drawStars();
 
   txt('LEADERBOARD', W/2, 56, 28, C_YELLOW, 'center', C_YELLOW);
 
-  const online  = await fetchOnlineScores();
-  const display = online || scores;
-  txt(online ? 'GLOBAL SCORES' : 'LOCAL SCORES', W/2, 80, 10, '#444');
+  if (!lbData) {
+    txt('LOADING...', W/2, 80, 10, '#666');
+    if (Math.floor(tick / 18) % 2)
+      txt('PRESS ENTER / TAP TO PLAY AGAIN', W/2, H-42, 13, '#aaa');
+    txt('Global scores via Firebase', W/2, H-20, 9, '#333');
+    return;
+  }
 
-  if (display.length === 0) {
+  const display = lbData;
+  txt(lbOnline ? 'GLOBAL SCORES' : 'LOCAL SCORES', W/2, 80, 10, '#444');
+
+  if (display.length === 0 && fetchAttempted) {
     txt('NO SCORES YET', W/2, 340, 18, '#444');
     txt('BE THE FIRST TO SEEK REVENGE!', W/2, 370, 13, '#333');
   } else {
