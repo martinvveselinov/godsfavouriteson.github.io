@@ -2,12 +2,6 @@
 //  SCREENS — all draw functions for each game state
 // =================================================================
 
-(function testPush() {
-  const entry = { name: 'TEST_' + Date.now(), score: Math.floor(Math.random() * 1000), date: Date.now() };
-  firebase.database().ref('leaderboard').push(entry)
-    .then(() => console.log('[FB TEST] Push OK:', entry))
-    .catch(e => console.error('[FB TEST] Push FAILED:', e));
-})();
 
 
 function txt(t, x, y, size, col, align = 'center', glow = '') {
