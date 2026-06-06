@@ -55,7 +55,7 @@ function drawTitle() {
   txt(playerName || 'YOU', W/2, 530, 10, '#555');
 
   if (Math.floor(tick / 18) % 2)
-    txt('PRESS ENTER TO START', W/2, 578, 15, '#fff', 'center', '#fff');
+    txt('PRESS ENTER / TAP TO START', W/2, 578, 15, '#fff', 'center', '#fff');
   txt('L  LEADERBOARD', W/2, 613, 11, '#444');
   txt('ARROW KEYS / WASD  MOVE   |   SPACE  SHOOT', W/2, 636, 11, '#333');
 
@@ -77,7 +77,7 @@ function drawName() {
   ctx.fillRect(bx, by, bw, bh); ctx.strokeRect(bx, by, bw, bh);
   txt(typingName + (Math.floor(tick / 15) % 2 ? '|' : ''), W/2, by + 37, 26, '#fff');
 
-  if (Math.floor(tick / 20) % 2) txt('PRESS ENTER TO CONFIRM', W/2, 458, 13, '#888');
+  if (Math.floor(tick / 20) % 2) txt('PRESS ENTER TO CONFIRM  •  TAP BOX TO TYPE', W/2, 458, 13, '#888');
   txt('ESC  back', W/2, 490, 11, '#444');
 }
 
@@ -188,7 +188,7 @@ function drawPaused() {
   ctx.restore();
 
   if (Math.floor(tick / 18) % 2)
-    txt('PRESS P TO RESUME', W/2, H/2 + 30, 15, '#fff', 'center', '#fff');
+    txt('PRESS P / TAP TO RESUME', W/2, H/2 + 30, 15, '#fff', 'center', '#fff');
   txt('ESC ALSO RESUMES', W/2, H/2 + 56, 11, '#777');
 }
 
@@ -216,7 +216,7 @@ function drawGameOver() {
   }
 
   if (Math.floor(tick / 18) % 2)
-    txt('PRESS ENTER  LEADERBOARD', W/2, 500, 13, '#bbb');
+    txt('PRESS ENTER / TAP — LEADERBOARD', W/2, 500, 13, '#bbb');
 }
 
 // ── WIN SCREEN ────────────────────────────────────────────────────
@@ -239,7 +239,7 @@ function drawWin() {
   }
 
   if (Math.floor(tick / 18) % 2)
-    txt('PRESS ENTER  LEADERBOARD', W/2, 440, 13, C_YELLOW);
+    txt('PRESS ENTER / TAP — LEADERBOARD', W/2, 440, 13, C_YELLOW);
 }
 
 // ── LEADERBOARD ───────────────────────────────────────────────────
@@ -281,7 +281,7 @@ async function drawLeaderboard() {
   }
 
   if (Math.floor(tick / 18) % 2)
-    txt('PRESS ENTER TO PLAY AGAIN', W/2, H-42, 13, '#aaa');
+    txt('PRESS ENTER / TAP TO PLAY AGAIN', W/2, H-42, 13, '#aaa');
   txt(USE_ONLINE_LB ? 'Global scores via dreamlo.com'
     : 'Local scores | set USE_ONLINE_LB=true in config.js for global', W/2, H-20, 9, '#333');
 }

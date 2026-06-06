@@ -19,8 +19,10 @@ let healthDrops  = [];
 
 // ── INPUT ─────────────────────────────────────────────────────────
 const keys = {};
+const nameInput = document.getElementById('nameInput');
 
 document.addEventListener('keydown', e => {
+  if (document.activeElement === nameInput) return; // hidden input handles its own keys (mobile name entry)
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))
     e.preventDefault();
   if (!keys[e.code]) handleMenuKey(e.code, e.key);
@@ -28,6 +30,88 @@ document.addEventListener('keydown', e => {
   if (AC && AC.state === 'suspended') AC.resume();
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ── MOBILE NAME ENTRY (hidden input → summons native keyboard) ───
+// Tapping the name box (see touch handler below) focuses this invisible
+// input. Its value drives `typingName` directly so the existing NAME-screen
+// rendering and confirm/cancel flow keep working unchanged.
+nameInput.addEventListener('input', () => {
+  typingName = nameInput.value.toUpperCase().slice(0, 14);
+  nameInput.value = typingName;
+});
+nameInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (typingName.trim().length > 0) {
+      sfxMenu(); playerName = typingName.trim().toUpperCase();
+      nameInput.blur(); nameInput.value = ''; typingName = '';
+      startGame();
+    }
+  } else if (e.key === 'Escape') {
+    nameInput.blur(); nameInput.value = ''; typingName = '';
+    gameState = 'TITLE';
+  }
+});
+
+// ── TOUCH CONTROLS ────────────────────────────────────────────────
+// Gameplay: hold anywhere = continuous shoot, swipe left/right = move.
+// Menus: a tap acts as "Enter" (start, confirm, resume, leaderboard advance);
+// on the NAME screen a tap focuses the hidden input to open the keyboard.
+let touchLastX = null;
+
+function touchOnStart(e) {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  if (!t) return;
+  if (AC && AC.state === 'suspended') AC.resume();
+
+  if (gameState === 'PLAYING') {
+    touchLastX = t.clientX;
+    keys['Space'] = true; // hold = shoot
+
+  } else if (gameState === 'NAME') {
+    nameInput.value = typingName;
+    nameInput.focus();
+
+  } else if (gameState === 'PAUSED'
+          || gameState === 'TITLE'
+          || gameState === 'GAMEOVER'
+          || gameState === 'WIN'
+          || gameState === 'LEADERBOARD') {
+    handleMenuKey('Enter', 'Enter');
+  }
+}
+
+function touchOnMove(e) {
+  e.preventDefault();
+  if (gameState !== 'PLAYING' || touchLastX === null) return;
+  const t = e.changedTouches[0];
+  if (!t) return;
+  const dx = t.clientX - touchLastX;
+  const SWIPE_DEADZONE = 1.5; // px — ignore tiny jitter
+  keys['ArrowLeft']  = dx < -SWIPE_DEADZONE;
+  keys['ArrowRight'] = dx >  SWIPE_DEADZONE;
+  touchLastX = t.clientX;
+}
+
+function touchOnEnd(e) {
+  e.preventDefault();
+  touchLastX = null;
+  keys['Space']      = false;
+  keys['ArrowLeft']  = false;
+  keys['ArrowRight'] = false;
+}
+
+C.addEventListener('touchstart',  touchOnStart, { passive: false });
+C.addEventListener('touchmove',   touchOnMove,  { passive: false });
+C.addEventListener('touchend',    touchOnEnd,   { passive: false });
+C.addEventListener('touchcancel', touchOnEnd,   { passive: false });
+
+// Swap the keyboard-control hint for a touch-friendly one on touch devices
+if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+  const hintEl = document.getElementById('hint');
+  if (hintEl) hintEl.textContent = 'SWIPE ←→ MOVE   |   HOLD  SHOOT   |   TAP  CONFIRM / RESUME';
+}
 
 function handleMenuKey(code, key) {
   // ── PAUSE TOGGLE (P or Escape, while actively playing) ──────────

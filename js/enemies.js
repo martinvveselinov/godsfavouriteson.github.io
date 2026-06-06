@@ -9,7 +9,7 @@ const ETYPES = {
 
   // ── SWARM: DELTA GUARD ─────────────────────────────────────────
   delta: {
-    hp:4, pts:12, w:36, h:46, col:'#334466',
+    hp:1, pts:8, w:36, h:46, col:'#334466',
     shoot(e) {
       if (e.state==='entering') return;
       if (Math.random() < 0.001*diffMult())
@@ -23,7 +23,7 @@ const ETYPES = {
 
   // ── SWARM: KURVA ───────────────────────────────────────────────
   kurva: {
-    hp:2, pts:8, w:34, h:44, col:'#cc2277',
+    hp:1, pts:12, w:34, h:44, col:'#cc2277',
     shoot(e) {
       if (e.state==='entering') return;
       if (Math.random() < 0.0014*diffMult()) {
@@ -48,12 +48,10 @@ const ETYPES = {
     },
     shoot(e) {
       if (e.state==='entering') return;
-      if (Math.random() < 0.01) {
+      if (Math.random() < 0.008) {
         const a = Math.atan2(player.y-e.y, player.x-e.x);
         eBullets.push({x:e.x,y:e.y+26,vx:Math.cos(a)*2.8,vy:Math.abs(Math.sin(a))*2.8+1,type:'hook',life:180});
         eBullets.push({x:e.x,y:e.y+26,vx:0,vy:3.2,type:'n'});
-        eBullets.push({x:e.x,y:e.y+26,vx:Math.cos(a)*4.2,vy:Math.abs(Math.sin(a))*3.2+1,type:'hook',life:180});
-        eBullets.push({x:e.x,y:e.y+26,vx:0,vy:5.2,type:'n'});
       }
     },
     draw(e) {
@@ -131,7 +129,7 @@ const ETYPES = {
 
   // ── BOSS: ANDREY INKED ────────────────────────────────────────
   inked: {
-    hp:120, pts:110, w:46, h:56, col:'#ff44bb',
+    hp:60, pts:110, w:46, h:56, col:'#ff44bb',
     bossMove(e) {
       e.bossTimer++;
       if (e.bossTimer%32===0) {
@@ -161,7 +159,7 @@ const ETYPES = {
 
   // ── BOSS: DJOKOV ──────────────────────────────────────────────
   jokov: {
-    hp:140, pts:140, w:54, h:62, col:'#2244bb',
+    hp:100, pts:140, w:54, h:62, col:'#2244bb',
     bossMove(e) {
       e.bossTimer++;
       if (!e.charging) {
