@@ -128,35 +128,17 @@ if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
   if (hintEl) hintEl.textContent = 'SWIPE ←→ MOVE   |   HOLD  SHOOT   |   TAP  CONFIRM / RESUME';
 }
 
-// ── RESUME AUDIO AFTER INTERRUPTIONS ──────────────────────────────
+// ── AUDIO RESUME POLICY ───────────────────────────────────────────
 // Mobile browsers auto-suspend the AudioContext whenever the page loses
-// "audio focus" — system volume-button presses, incoming calls/notifications,
-// switching apps, locking the screen, etc. Without this, sound (and the
-// game can *feel* like it "completely stopped") doesn't come back on its
-// own even after the interruption ends and the page is visible again.
-function resumeAudioIfNeeded() {
-  if (!AC) return;
-  if (AC.state === 'suspended') {
-    AC.resume().catch(() => {});
-  } else if (AC.state === 'closed') {
-    // Some mobile browsers fully CLOSE the context on certain interruptions
-    // (rather than just suspending it) — resume() can't bring it back, so
-    // the only fix is to build a fresh one. getAC() does that for us.
-    AC = null;
-    getAC();
-  }
-}
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) resumeAudioIfNeeded();
-});
-window.addEventListener('focus',    resumeAudioIfNeeded);
-window.addEventListener('pageshow', resumeAudioIfNeeded);
-
-// Belt-and-suspenders: poll a few times a second. Some interruptions (e.g.
-// hardware volume-button presses on certain Android/iOS browsers) don't
-// reliably fire visibilitychange/focus events at all, so the listeners above
-// can miss them — a periodic check catches those too.
-setInterval(resumeAudioIfNeeded, 250);
+// "audio focus" (volume-button presses, calls/notifications, app-switch,
+// screen lock, etc). The fix is intentionally narrow: browsers only honour
+// resume() calls made directly inside a user-gesture handler (a tap or key
+// press — see the `keydown`, `touchstart`, and `touchmove` handlers above,
+// each of which already calls `AC.resume()` when suspended). Calls made on
+// a timer or from visibility/focus events are often silently ignored by the
+// browser AND can fight its own audio-session management — which is exactly
+// what produces a "sometimes on, sometimes off, out of nowhere" flicker.
+// So: no polling, no background listeners — only resume from real input.
 
 function handleMenuKey(code, key) {
   // ── PAUSE TOGGLE (P or Escape, while actively playing) ──────────
