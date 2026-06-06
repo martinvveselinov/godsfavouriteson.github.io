@@ -77,8 +77,16 @@ function touchOnStart(e) {
     nameInput.value = typingName;
     nameInput.focus();
 
+  } else if (gameState === 'TITLE') {
+    const rect   = C.getBoundingClientRect();
+    const tapY   = (t.clientY - rect.top) * (H / rect.height);
+    if (tapY > 595 && tapY < 635) {
+      handleMenuKey('KeyL', 'l'); // leaderboard button tap zone
+    } else {
+      handleMenuKey('Enter', 'Enter');
+    }
+
   } else if (gameState === 'PAUSED'
-          || gameState === 'TITLE'
           || gameState === 'GAMEOVER'
           || gameState === 'WIN'
           || gameState === 'LEADERBOARD') {
