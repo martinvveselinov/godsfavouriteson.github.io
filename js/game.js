@@ -91,10 +91,15 @@ function touchOnMove(e) {
   if (gameState !== 'PLAYING' || touchLastX === null) return;
   const t = e.changedTouches[0];
   if (!t) return;
-  const dx = t.clientX - touchLastX;
-  const SWIPE_DEADZONE = 1.5; // px — ignore tiny jitter
-  keys['ArrowLeft']  = dx < -SWIPE_DEADZONE;
-  keys['ArrowRight'] = dx >  SWIPE_DEADZONE;
+  // Drag the ship 1:1 with the finger. clientX is in CSS pixels, but the
+  // canvas's internal coordinate space is fixed at W=600 — the displayed
+  // size on a phone is usually much smaller, so a raw pixel delta would
+  // barely move the ship. Scale by (internal width / displayed width) so
+  // a full-width swipe moves the ship a full screen-width, every time.
+  const rect   = C.getBoundingClientRect();
+  const scaleX = W / rect.width;
+  const dx     = (t.clientX - touchLastX) * scaleX;
+  player.x = Math.max(player.w / 2 + 4, Math.min(W - player.w / 2 - 4, player.x + dx));
   touchLastX = t.clientX;
 }
 
@@ -116,6 +121,21 @@ if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
   const hintEl = document.getElementById('hint');
   if (hintEl) hintEl.textContent = 'SWIPE ←→ MOVE   |   HOLD  SHOOT   |   TAP  CONFIRM / RESUME';
 }
+
+// ── RESUME AUDIO AFTER INTERRUPTIONS ──────────────────────────────
+// Mobile browsers auto-suspend the AudioContext whenever the page loses
+// "audio focus" — system volume-button presses, incoming calls/notifications,
+// switching apps, locking the screen, etc. Without this, sound (and the
+// game can *feel* like it "completely stopped") doesn't come back on its
+// own even after the interruption ends and the page is visible again.
+function resumeAudioIfNeeded() {
+  if (AC && AC.state === 'suspended') AC.resume().catch(() => {});
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) resumeAudioIfNeeded();
+});
+window.addEventListener('focus', resumeAudioIfNeeded);
+window.addEventListener('pageshow', resumeAudioIfNeeded);
 
 function handleMenuKey(code, key) {
   // ── PAUSE TOGGLE (P or Escape, while actively playing) ──────────
