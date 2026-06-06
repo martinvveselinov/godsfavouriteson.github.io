@@ -347,7 +347,15 @@ function createEnemy(spec) {
   }
   if (spec.boss) {
     return {
-      type:spec.type, x:W/2, y:-110, vx:2.2,
+      type:spec.type, x:W/2, y:-110, vx:2.2, vy:0,
+      // `vy` matters for velocity-driven bosses (e.g. ANDREY INKED's bossMove,
+      // which only re-randomizes vx/vy every 32 ticks): without an initial
+      // value here it's `undefined` on the very first boss_fight tick, so
+      // `e.y += e.vy` becomes NaN and stays NaN forever (the y-bounds clamps
+      // never trigger on NaN). A NaN translate() is a silent no-op per the
+      // Canvas spec, so the sprite freezes wherever the transform last was —
+      // the canvas origin / top-left corner — exactly the "boss rushes to a
+      // corner and gets stuck" bug.
       state:'entering', isBoss:true,
       targetX:W/2, targetY:130,
       hp:ETYPES[spec.type].hp, pts:ETYPES[spec.type].pts,

@@ -195,24 +195,22 @@ async function saveScore() {
   scores.sort((a, b) => b.score - a.score);
   scores = scores.slice(0, 10);
   localStorage.setItem('stoyanScores', JSON.stringify(scores));
-  if (USE_ONLINE_LB) {
-    try {
-      await fetch(`https://dreamlo.com/lb/${LB_PRIVATE_CODE}/add/${encodeURIComponent(playerName)}/${score}`);
-      onlineScores = null;
-    } catch (e) {}
-  }
+  try {
+    await firebase.database().ref('leaderboard').push({ name: playerName, score, date: Date.now() });
+    onlineScores = null;
+  } catch (e) {}
 }
 
 async function fetchOnlineScores() {
-  if (!USE_ONLINE_LB) return null;
   if (onlineScores) return onlineScores;
   try {
-    const r = await fetch(`https://dreamlo.com/lb/${LB_PUBLIC_CODE}/json`);
-    const d = await r.json();
-    let entries = d.dreamlo?.leaderboard?.entry;
-    if (!entries) return null;
-    if (!Array.isArray(entries)) entries = [entries];
-    onlineScores = entries.map(e => ({ name: e.name, score: parseInt(e.score) }));
+    const snap = await firebase.database().ref('leaderboard')
+      .orderByChild('score').limitToLast(10).get();
+    if (!snap.exists()) return null;
+    const entries = [];
+    snap.forEach(child => entries.push(child.val()));
+    entries.sort((a, b) => b.score - a.score);
+    onlineScores = entries;
     return onlineScores;
   } catch (e) { return null; }
 }

@@ -282,6 +282,5 @@ async function drawLeaderboard() {
 
   if (Math.floor(tick / 18) % 2)
     txt('PRESS ENTER / TAP TO PLAY AGAIN', W/2, H-42, 13, '#aaa');
-  txt(USE_ONLINE_LB ? 'Global scores via dreamlo.com'
-    : 'Local scores | set USE_ONLINE_LB=true in config.js for global', W/2, H-20, 9, '#333');
+  txt('Global scores via Firebase', W/2, H-20, 9, '#333');
 }

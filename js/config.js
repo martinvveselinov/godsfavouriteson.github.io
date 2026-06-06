@@ -1,10 +1,5 @@
 // =================================================================
-//  CONFIG — canvas setup, palette, leaderboard credentials
-//
-//  ONLINE LEADERBOARD (free, 2 min setup):
-//  1. Go to https://dreamlo.com -> "Get a free leaderboard"
-//  2. Paste your codes below
-//  3. Set USE_ONLINE_LB = true
+//  CONFIG — canvas setup, palette, Firebase leaderboard
 // =================================================================
 
 const C   = document.getElementById('c');
@@ -21,7 +16,15 @@ const C_PBULLET = '#ffff55';
 const C_EBULLET = '#ff2244';
 const C_SKIN    = '#c8906a';
 
-// Online leaderboard
-const USE_ONLINE_LB   = false;
-const LB_PUBLIC_CODE  = 'YOUR_PUBLIC_CODE_HERE';
-const LB_PRIVATE_CODE = 'YOUR_PRIVATE_CODE_HERE';
+// Firebase leaderboard
+const firebaseConfig = {
+  apiKey:            'AIzaSyDjWVJweGyZ-GDdhjfQiroRDxZ7og3a2W4',
+  authDomain:        'gods-favourite-son.firebaseapp.com',
+  databaseURL:       'https://gods-favourite-son-default-rtdb.europe-west1.firebasedatabase.app',
+  projectId:         'gods-favourite-son',
+  storageBucket:     'gods-favourite-son.firebasestorage.app',
+  messagingSenderId: '1039383178035',
+  appId:             '1:1039383178035:web:e95c27aad1a819ad67ac46',
+  measurementId:     'G-G6LFKZK3BK'
+};
+firebase.initializeApp(firebaseConfig);
