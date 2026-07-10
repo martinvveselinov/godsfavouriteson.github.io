@@ -23,6 +23,88 @@ let floaters     = [];
 // Screen-shake magnitude in px, decays each tick (juice on hits/pickups)
 let shake        = 0;
 
+// ── LEVELING / ROGUELITE UPGRADES ─────────────────────────────────
+let levelUpPending = false;   // freezes gameplay while the choice card is up
+let levelUpOffers  = [];      // the 3 (or fewer) upgrades on offer
+let levelUpSel     = 0;       // highlighted card (keyboard nav)
+
+// XP needed to go from `level` to the next level.
+function xpForNext(level) { return 8 + level * 4; }
+
+// Base-weapon upgrade track for the ARSENAL card (each pick moves one tier).
+const BASE_TRACK = ['single', 'twin', 'rapid', 'spread', 'pierce'];
+function nextBaseWeapon() {
+  const i = BASE_TRACK.indexOf(player.baseWeapon);
+  return BASE_TRACK[Math.min(i + 1, BASE_TRACK.length - 1)];
+}
+
+// The upgrade pool. `available()` (optional) hides an offer when maxed/pointless.
+const UPGRADES = [
+  { id:'sharp',  name:'SHARP BLADES',  desc:'+1 damage',            col:C_YELLOW,
+    apply(){ player.dmgBonus++; } },
+  { id:'pierce', name:'PIERCING EDGE', desc:'Punch through +1',     col:C_MAGENTA,
+    apply(){ player.pierceBonus++; } },
+  { id:'quick',  name:'QUICK HANDS',   desc:'Fire 15% faster',      col:C_CYAN,
+    apply(){ player.rateMult *= 0.85; }, available(){ return player.rateMult > 0.42; } },
+  { id:'arsenal',name:'ARSENAL',       desc:'Upgrade base weapon',  col:C_ORANGE,
+    apply(){ player.baseWeapon = nextBaseWeapon();
+             if (player.weaponTimer === 0) player.weapon = player.baseWeapon; },
+    available(){ return player.baseWeapon !== 'pierce'; } },
+  { id:'endure', name:'ENDURANCE',     desc:'Power-ups last longer',col:C_CYAN,
+    apply(){ player.weaponDurMult *= 1.4; }, available(){ return player.weaponDurMult < 3; } },
+  { id:'magnet', name:'MAGNET',        desc:'Bigger pickup range',  col:C_ORANGE,
+    apply(){ player.pickupR += 16; }, available(){ return player.pickupR < 90; } },
+  { id:'swift',  name:'ADRENALINE',    desc:'+1 move speed',        col:C_GREEN,
+    apply(){ player.speed += 1; }, available(){ return player.speed < 9; } },
+  { id:'iron',   name:'IRON HIDE',     desc:'+1 max life & heal',   col:C_RED,
+    apply(){ player.maxLives++; player.lives = player.maxLives; },
+    available(){ return player.maxLives < 6; } },
+  { id:'heal',   name:'SECOND WIND',   desc:'Refill all lives',     col:C_RED,
+    apply(){ player.lives = player.maxLives; },
+    available(){ return player.lives < player.maxLives; } },
+];
+
+// Pick up to 3 distinct available upgrades; SECOND WIND is weighted up when hurt.
+function rollOffers() {
+  const pool  = UPGRADES.filter(u => !u.available || u.available());
+  const picks = [];
+  while (picks.length < 3 && pool.length) {
+    const weights = pool.map(u => (u.id === 'heal' && player.lives < player.maxLives) ? 3 : 1);
+    let r = Math.random() * weights.reduce((a, b) => a + b, 0), idx = 0;
+    for (; idx < pool.length; idx++) { r -= weights[idx]; if (r <= 0) break; }
+    picks.push(pool[idx]); pool.splice(idx, 1);
+  }
+  return picks;
+}
+
+// Called on every kill. Accrues XP and opens a level-up card when the bar fills.
+function addXP(n) {
+  player.xp += n;
+  if (player.xp >= player.xpNext && !levelUpPending) triggerLevelUp();
+}
+
+function triggerLevelUp() {
+  const offers = rollOffers();
+  if (offers.length === 0) {                 // everything maxed — just level, no pause
+    player.xp -= player.xpNext; player.level++; player.xpNext = xpForNext(player.level);
+    return;
+  }
+  levelUpOffers = offers; levelUpSel = 0; levelUpPending = true;
+  sfxPower(); shake = 6;
+}
+
+function chooseUpgrade(i) {
+  const up = levelUpOffers[i];
+  if (!up) return;
+  up.apply();
+  addFloater(up.name + '!', player.x, player.y - 46, up.col || C_YELLOW);
+  spawnParticles(player.x, player.y, up.col || C_YELLOW, 20);
+  player.xp -= player.xpNext; player.level++; player.xpNext = xpForNext(player.level);
+  levelUpPending = false; levelUpOffers = [];
+  sfxMenu();
+  if (player.xp >= player.xpNext) triggerLevelUp();   // chained level-ups
+}
+
 const WEAPON_POOL = ['spread', 'rapid', 'twin', 'pierce'];
 function mkWeaponDrop(x, y) {
   return { x, y, vy: 1.1 + Math.random() * 0.5, rot: 0,
@@ -85,7 +167,14 @@ function touchOnStart(e) {
   if (!t) return;
   if (AC && AC.state === 'suspended') AC.resume();
 
-  if (gameState === 'PLAYING') {
+  if (gameState === 'PLAYING' && levelUpPending) {
+    // Tap the card you want — screen split into N equal columns
+    const rect = C.getBoundingClientRect();
+    const tapX = (t.clientX - rect.left) * (W / rect.width);
+    const n    = levelUpOffers.length;
+    chooseUpgrade(Math.max(0, Math.min(n - 1, Math.floor(tapX / (W / n)))));
+
+  } else if (gameState === 'PLAYING') {
     touchLastX = t.clientX;
     keys['Space'] = true; // hold = shoot
 
@@ -165,6 +254,18 @@ if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
 // So: no polling, no background listeners — only resume from real input.
 
 function handleMenuKey(code, key) {
+  // ── LEVEL-UP CARD SELECTION (takes over input while a choice is open) ──
+  if (gameState === 'PLAYING' && levelUpPending) {
+    const n = levelUpOffers.length;
+    if      (code === 'Digit1' || code === 'Numpad1') chooseUpgrade(0);
+    else if (code === 'Digit2' || code === 'Numpad2') chooseUpgrade(1);
+    else if (code === 'Digit3' || code === 'Numpad3') chooseUpgrade(2);
+    else if (code === 'ArrowLeft'  || code === 'KeyA') levelUpSel = (levelUpSel + n - 1) % n;
+    else if (code === 'ArrowRight' || code === 'KeyD') levelUpSel = (levelUpSel + 1) % n;
+    else if (code === 'Enter' || code === 'Space')     chooseUpgrade(levelUpSel);
+    return;
+  }
+
   // ── PAUSE TOGGLE (P or Escape, while actively playing) ──────────
   if (gameState === 'PLAYING' && (code === 'KeyP' || code === 'Escape')) {
     sfxMenu(); pausedFrom = gameState; gameState = 'PAUSED';
@@ -210,6 +311,8 @@ function startGame() {
   weaponDrops  = [];
   floaters     = [];
   shake        = 0;
+  levelUpPending = false;
+  levelUpOffers  = [];
   spawnQueue   = [];
   waveActive   = false;
   player.reset();
@@ -267,7 +370,7 @@ function damageEnemy(e, idx, dmg, isHealing) {
     if (e.dmgSinceLoot >= e.lootThreshold) {
       e.dmgSinceLoot = 0;
       e.lootThreshold = bossLootThreshold();
-      if (player.lives < 3 && Math.random() < 0.35)
+      if (player.lives < player.maxLives && Math.random() < 0.35)
         healthDrops.push({ x: e.x, y: e.y + 20, vy: 1.4 });
       else
         weaponDrops.push(mkWeaponDrop(e.x + (Math.random()-0.5)*40, e.y + 20));
@@ -277,6 +380,7 @@ function damageEnemy(e, idx, dmg, isHealing) {
   if (e.hp > 0) return;
 
   score += e.pts;
+  addXP(e.isBoss ? 15 : 1);   // bosses are a big XP payout
   if (!playKillClip(e.type)) sfxDeath();
 
   const stageType = STAGES[currentStage]?.type || '';
@@ -300,6 +404,7 @@ function damageEnemy(e, idx, dmg, isHealing) {
 function update() {
   tick++;
   if (gameState !== 'PLAYING') return;
+  if (levelUpPending) return;   // freeze the battlefield while choosing an upgrade
 
   player.update();
 
@@ -364,10 +469,11 @@ function update() {
     return true;
   });
 
-  // Health drops
+  // Health drops (pickup radius grows with the MAGNET upgrade)
+  const pr = player.pickupR;
   healthDrops = healthDrops.filter(h => {
     h.y += h.vy;
-    if (Math.abs(h.x - player.x) < 24 && Math.abs(h.y - player.y) < 24 && player.lives < 3) {
+    if (Math.abs(h.x - player.x) < pr && Math.abs(h.y - player.y) < pr && player.lives < player.maxLives) {
       player.lives++;
       spawnParticles(h.x, h.y, C_RED, 10);
       beep(880, 0.15, 'square', 0.2); beep(1100, 0.15, 'square', 0.15);
@@ -379,9 +485,9 @@ function update() {
   // Weapon crates — fall, and on pickup swap in a timed weapon
   weaponDrops = weaponDrops.filter(d => {
     d.y += d.vy; d.rot += 0.05;
-    if (Math.abs(d.x - player.x) < 26 && Math.abs(d.y - player.y) < 26) {
+    if (Math.abs(d.x - player.x) < pr && Math.abs(d.y - player.y) < pr) {
       const wp = WEAPONS[d.wtype];
-      player.weapon = d.wtype; player.weaponTimer = wp.dur;
+      player.weapon = d.wtype; player.weaponTimer = Math.round(wp.dur * player.weaponDurMult);
       spawnParticles(d.x, d.y, wp.col, 18);
       addFloater(wp.name + '!', player.x, player.y - 40, wp.col);
       sfxPower(); shake = 8;

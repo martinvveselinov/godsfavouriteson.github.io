@@ -156,6 +156,50 @@ function drawPlaying() {
     if (Math.floor(tick / 30) % 2)
       txt('HEALING WAVE - COLLECT HEARTS', W/2, H - 50, 11, '#44ff88');
   }
+
+  // Level-up upgrade cards (overlays everything, gameplay frozen)
+  if (levelUpPending) drawLevelUp();
+}
+
+// ── LEVEL-UP CARD SELECTION ───────────────────────────────────────
+function drawLevelUp() {
+  ctx.fillStyle = 'rgba(2,2,12,0.78)'; ctx.fillRect(0, 0, W, H);
+
+  const pulse = 1 + Math.sin(tick / 14) * 0.05;
+  ctx.save(); ctx.translate(W/2, 150); ctx.scale(pulse, pulse);
+  txt('LEVEL UP', 0, 0, 44, C_YELLOW, 'center', C_YELLOW);
+  ctx.restore();
+  txt('LEVEL ' + player.level + '  →  ' + (player.level + 1), W/2, 190, 15, '#bbb');
+  txt('CHOOSE AN UPGRADE', W/2, 224, 13, '#888');
+
+  const n     = levelUpOffers.length;
+  const cardW = 150, cardH = 176, gap = 16;
+  const totalW = n * cardW + (n - 1) * gap;
+  const x0 = W/2 - totalW/2, y = 272;
+
+  levelUpOffers.forEach((u, i) => {
+    const x = x0 + i * (cardW + gap);
+    const sel = i === levelUpSel;
+    ctx.fillStyle   = sel ? '#16160a' : '#0a0a16';
+    ctx.strokeStyle = u.col;
+    ctx.lineWidth   = sel ? 3 : 1.5;
+    ctx.shadowColor = sel ? u.col : 'transparent';
+    ctx.shadowBlur  = sel ? 16 : 0;
+    ctx.fillRect(x, y, cardW, cardH); ctx.strokeRect(x, y, cardW, cardH);
+    ctx.shadowBlur = 0;
+
+    // number badge
+    ctx.beginPath(); ctx.arc(x + cardW/2, y + 40, 18, 0, Math.PI*2);
+    ctx.strokeStyle = u.col; ctx.lineWidth = 1.5; ctx.stroke();
+    txt(String(i + 1), x + cardW/2, y + 46, 20, u.col);
+
+    txt(u.name, x + cardW/2, y + 100, 15, '#fff');
+    txt(u.desc, x + cardW/2, y + 130, 11, '#9aa');
+  });
+
+  if (Math.floor(tick / 18) % 2)
+    txt('PRESS 1 / 2 / 3   —   OR TAP A CARD', W/2, 500, 12, '#aaa');
+  txt('← → to move, ENTER to pick', W/2, 526, 10, '#555');
 }
 
 // Enemy sniper telegraph — pulsing ring + aim line while locking on.
@@ -216,19 +260,20 @@ function drawFloaters() {
 }
 
 function drawHUD() {
-  for (let i = 0; i < 3; i++) {
-    ctx.font = '20px serif'; ctx.textAlign = 'left';
+  for (let i = 0; i < player.maxLives; i++) {
+    ctx.font = '18px serif'; ctx.textAlign = 'left';
     ctx.fillStyle = i < player.lives ? C_RED : '#222';
-    ctx.fillText('♥', 10 + i*26, 30);
+    ctx.fillText('♥', 10 + i*22, 30);
   }
   // Active weapon + countdown bar
   if (player.weaponTimer > 0) {
     const wp = WEAPONS[player.weapon];
+    const dur = Math.max(1, wp.dur * player.weaponDurMult);
     ctx.font = 'bold 11px Courier New'; ctx.textAlign = 'left';
     ctx.fillStyle = wp.col; ctx.shadowColor = wp.col; ctx.shadowBlur = 6;
     ctx.fillText(wp.name, 10, 52); ctx.shadowBlur = 0;
     ctx.fillStyle = '#111'; ctx.fillRect(10, 58, 70, 4);
-    ctx.fillStyle = wp.col; ctx.fillRect(10, 58, 70 * (player.weaponTimer / wp.dur), 4);
+    ctx.fillStyle = wp.col; ctx.fillRect(10, 58, 70 * Math.min(1, player.weaponTimer / dur), 4);
   }
   ctx.font = '11px Courier New'; ctx.textAlign = 'center'; ctx.fillStyle = '#666';
   ctx.fillText(playerName, W/2, 18);
@@ -252,6 +297,15 @@ function drawHUD() {
   ctx.fillText(score, W - 14, 28);
   ctx.font = '10px Courier New'; ctx.fillStyle = '#444';
   ctx.fillText('SCORE', W - 14, 42);
+
+  // Character level + XP bar along the very bottom edge
+  const xpPct = Math.max(0, Math.min(1, player.xp / player.xpNext));
+  ctx.fillStyle = '#0c0c18'; ctx.fillRect(0, H - 4, W, 4);
+  ctx.fillStyle = C_YELLOW;  ctx.fillRect(0, H - 4, W * xpPct, 4);
+  ctx.font = 'bold 11px Courier New'; ctx.textAlign = 'left';
+  ctx.fillStyle = C_YELLOW; ctx.shadowColor = C_YELLOW; ctx.shadowBlur = 5;
+  ctx.fillText('LV ' + player.level, 10, H - 10);
+  ctx.shadowBlur = 0;
 }
 
 // ── PAUSED ────────────────────────────────────────────────────────

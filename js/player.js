@@ -24,39 +24,55 @@ const player = {
   x: W / 2, y: H - 72,
   w: 52, h: 56,
   speed: 5,
-  lives: 3,
+  lives: 3, maxLives: 3,
   shootCD: 0,
   invincible: 0,
   weapon: 'single', weaponTimer: 0,
   bullets: [],
 
+  // ── ROGUELITE BUILD (permanent for the run, chosen at level-ups) ──
+  level: 1, xp: 0, xpNext: 12,
+  baseWeapon: 'single',   // what timed pickups revert to (ARSENAL upgrades this)
+  dmgBonus: 0,            // +damage per shot (SHARP BLADES)
+  pierceBonus: 0,         // +pierce per shot (PIERCING EDGE)
+  rateMult: 1,            // fire-rate multiplier, <1 = faster (QUICK HANDS)
+  pickupR: 26,            // pickup pickup radius (MAGNET)
+  weaponDurMult: 1,       // timed-weapon duration multiplier (ENDURANCE)
+
   reset() {
     this.x = W / 2; this.y = H - 72;
-    this.lives = 3; this.bullets = [];
+    this.lives = 3; this.maxLives = 3; this.bullets = [];
     this.invincible = 0; this.shootCD = 0;
+    this.speed = 5;
     this.weapon = 'single'; this.weaponTimer = 0;
+    this.level = 1; this.xp = 0; this.xpNext = 12;
+    this.baseWeapon = 'single';
+    this.dmgBonus = 0; this.pierceBonus = 0; this.rateMult = 1;
+    this.pickupR = 26; this.weaponDurMult = 1;
   },
 
-  // Fire the current weapon's bullet pattern from the muzzle.
+  // Fire the current weapon's bullet pattern from the muzzle. Build bonuses
+  // (dmgBonus / pierceBonus) fold into every bullet.
   fire() {
     const bx = this.x + 2, by = this.y - 24, col = WEAPONS[this.weapon].col;
+    const db = this.dmgBonus, pb = this.pierceBonus;
     switch (this.weapon) {
       case 'spread':
         [-0.26, 0, 0.26].forEach(a =>
-          this.bullets.push(mkBullet(bx, by, Math.sin(a) * 11, Math.cos(a) * 11, col, 1, 0)));
+          this.bullets.push(mkBullet(bx, by, Math.sin(a) * 11, Math.cos(a) * 11, col, 1 + db, pb)));
         break;
       case 'twin':
-        this.bullets.push(mkBullet(bx - 11, by, 0, 11, col, 1, 0));
-        this.bullets.push(mkBullet(bx + 11, by, 0, 11, col, 1, 0));
+        this.bullets.push(mkBullet(bx - 11, by, 0, 11, col, 1 + db, pb));
+        this.bullets.push(mkBullet(bx + 11, by, 0, 11, col, 1 + db, pb));
         break;
       case 'rapid':
-        this.bullets.push(mkBullet(bx, by, 0, 13, col, 1, 0));
+        this.bullets.push(mkBullet(bx, by, 0, 13, col, 1 + db, pb));
         break;
       case 'pierce':
-        this.bullets.push(mkBullet(bx, by, 0, 12, col, 2, 3));
+        this.bullets.push(mkBullet(bx, by, 0, 12, col, 2 + db, 3 + pb));
         break;
       default:
-        this.bullets.push(mkBullet(bx, by, 0, 11, col, 1, 0));
+        this.bullets.push(mkBullet(bx, by, 0, 11, col, 1 + db, pb));
     }
   },
 
@@ -65,9 +81,9 @@ const player = {
     if (keys['ArrowRight'] || keys['KeyD']) this.x = Math.min(W - this.w / 2 - 4, this.x + this.speed);
     if (this.invincible > 0) this.invincible--;
     if (this.shootCD > 0) this.shootCD--;
-    if (this.weaponTimer > 0 && --this.weaponTimer === 0) this.weapon = 'single';
+    if (this.weaponTimer > 0 && --this.weaponTimer === 0) this.weapon = this.baseWeapon;
     if ((keys['Space'] || keys['ArrowUp'] || keys['KeyW']) && this.shootCD === 0) {
-      this.shootCD = WEAPONS[this.weapon].rate;
+      this.shootCD = Math.max(3, Math.round(WEAPONS[this.weapon].rate * this.rateMult));
       this.fire();
       spawnParticles(this.x + 2, this.y - 26, C_PBULLET, 2); // muzzle flash
       sfxShoot();
