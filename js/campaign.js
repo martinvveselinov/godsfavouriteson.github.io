@@ -27,15 +27,15 @@ const D = 'delta', K = 'kurva';
 const STAGES = [
 
   // ── PERIOD 1: LEVELS 1–9 swarm, LEVEL 10 boss ─────────────────
-  // { type:'swarm', label:'LEVEL 1',  rows:[[D,D,D,D,D]] },
-  // { type:'swarm', label:'LEVEL 2',  rows:[[K,D,K,D,K]] },
-  // { type:'swarm', label:'LEVEL 3',  rows:[[D,D,D,D,D],[K,D,K,D,K]] },
-  // { type:'swarm', label:'LEVEL 4',  rows:[[K,K,D,K,K],[D,D,D,D,D]] },
-  // { type:'swarm', label:'LEVEL 5',  rows:[[D,K,D,K,D,K],[K,D,K,D,K,D]] },
-  // { type:'swarm', label:'LEVEL 6',  rows:[[K,K,D,D,K,K],[D,K,K,D,K,D]] },
-  // { type:'swarm', label:'LEVEL 7',  rows:[[K,K,K,D,K,K],[D,K,D,K,D,K],[K,D,K,D,K,D]] },
-  // { type:'swarm', label:'LEVEL 8',  rows:[[K,K,K,K,K,K],[D,D,D,D,D,D],[K,D,K,D,K,D]] },
-  // { type:'swarm', label:'LEVEL 9',  rows:[[K,K,K,K,K,K],[D,K,D,K,D,K],[K,K,D,D,K,K]] },
+  { type:'swarm', label:'LEVEL 1',  rows:[[D,D,D,D,D]] },
+  { type:'swarm', label:'LEVEL 2',  rows:[[K,D,K,D,K]] },
+  { type:'swarm', label:'LEVEL 3',  rows:[[D,D,D,D,D],[K,D,K,D,K]] },
+  { type:'swarm', label:'LEVEL 4',  rows:[[K,K,D,K,K],[D,D,D,D,D]] },
+  { type:'swarm', label:'LEVEL 5',  rows:[[D,K,D,K,D,K],[K,D,K,D,K,D]] },
+  { type:'swarm', label:'LEVEL 6',  rows:[[K,K,D,D,K,K],[D,K,K,D,K,D]] },
+  { type:'swarm', label:'LEVEL 7',  rows:[[K,K,K,D,K,K],[D,K,D,K,D,K],[K,D,K,D,K,D]] },
+  { type:'swarm', label:'LEVEL 8',  rows:[[K,K,K,K,K,K],[D,D,D,D,D,D],[K,D,K,D,K,D]] },
+  { type:'swarm', label:'LEVEL 9',  rows:[[K,K,K,K,K,K],[D,K,D,K,D,K],[K,K,D,D,K,K]] },
   { type:'boss',  label:'LEVEL 10 — TOSHO KUKATA!', bossType:'tosho',
     minRows:[[D,D,D,D]] },
 

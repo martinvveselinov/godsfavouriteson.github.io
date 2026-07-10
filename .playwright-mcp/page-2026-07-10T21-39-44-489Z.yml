@@ -1,0 +1,3 @@
+- generic [active] [ref=e1]:
+  - textbox
+  - generic [ref=e3]: ← → / WASD MOVE | SPACE SHOOT | ENTER CONFIRM | P PAUSE
