@@ -120,8 +120,12 @@ const keys = {};
 // Guarded with `|| null`: if index.html is ever out of sync and lacks
 // #nameInput, the rest of the game must still load instead of crashing here.
 const nameInput = document.getElementById('nameInput') || null;
+// Guarded with `|| null`: if index.html is ever out of sync and lacks
+// #nameInput, the rest of the game must still load instead of crashing here.
+const nameInput = document.getElementById('nameInput') || null;
 
 document.addEventListener('keydown', e => {
+  if (nameInput && document.activeElement === nameInput) return; // hidden input handles its own keys (mobile name entry)
   if (nameInput && document.activeElement === nameInput) return; // hidden input handles its own keys (mobile name entry)
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))
     e.preventDefault();
@@ -135,6 +139,25 @@ document.addEventListener('keyup', e => { keys[e.code] = false; });
 // Tapping the name box (see touch handler below) focuses this invisible
 // input. Its value drives `typingName` directly so the existing NAME-screen
 // rendering and confirm/cancel flow keep working unchanged.
+if (nameInput) {
+  nameInput.addEventListener('input', () => {
+    typingName = nameInput.value.toUpperCase().slice(0, 14);
+    nameInput.value = typingName;
+  });
+  nameInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (typingName.trim().length > 0) {
+        sfxMenu(); playerName = typingName.trim().toUpperCase();
+        nameInput.blur(); nameInput.value = ''; typingName = '';
+        startGame();
+      }
+    } else if (e.key === 'Escape') {
+      nameInput.blur(); nameInput.value = ''; typingName = '';
+      gameState = 'TITLE';
+    }
+  });
+}
 if (nameInput) {
   nameInput.addEventListener('input', () => {
     typingName = nameInput.value.toUpperCase().slice(0, 14);
@@ -179,8 +202,18 @@ function touchOnStart(e) {
     keys['Space'] = true; // hold = shoot
 
   } else if (gameState === 'NAME' && nameInput) {
+  } else if (gameState === 'NAME' && nameInput) {
     nameInput.value = typingName;
     nameInput.focus();
+
+  } else if (gameState === 'TITLE') {
+    const rect   = C.getBoundingClientRect();
+    const tapY   = (t.clientY - rect.top) * (H / rect.height);
+    if (tapY > 595 && tapY < 635) {
+      handleMenuKey('KeyL', 'l'); // leaderboard button tap zone
+    } else {
+      handleMenuKey('Enter', 'Enter');
+    }
 
   } else if (gameState === 'TITLE') {
     const rect   = C.getBoundingClientRect();
@@ -213,7 +246,22 @@ function touchOnMove(e) {
   const scaleX = W / rect.width;
   const dx     = (t.clientX - touchLastX) * scaleX;
   player.x = Math.max(player.w / 2 + 4, Math.min(W - player.w / 2 - 4, player.x + dx));
+  // Drag the ship 1:1 with the finger. clientX is in CSS pixels, but the
+  // canvas's internal coordinate space is fixed at W=600 — the displayed
+  // size on a phone is usually much smaller, so a raw pixel delta would
+  // barely move the ship. Scale by (internal width / displayed width) so
+  // a full-width swipe moves the ship a full screen-width, every time.
+  const rect   = C.getBoundingClientRect();
+  const scaleX = W / rect.width;
+  const dx     = (t.clientX - touchLastX) * scaleX;
+  player.x = Math.max(player.w / 2 + 4, Math.min(W - player.w / 2 - 4, player.x + dx));
   touchLastX = t.clientX;
+
+  // Keep nudging the AudioContext awake throughout a long drag — not just
+  // at the moment the finger first touches down. A click-and-drag session
+  // can last many seconds, plenty of time for an interruption (e.g. a
+  // volume-button press) to suspend audio mid-drag.
+  if (AC && AC.state === 'suspended') AC.resume().catch(() => {});
 
   // Keep nudging the AudioContext awake throughout a long drag — not just
   // at the moment the finger first touches down. A click-and-drag session
@@ -240,6 +288,18 @@ if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
   const hintEl = document.getElementById('hint');
   if (hintEl) hintEl.textContent = 'SWIPE ←→ MOVE   |   HOLD  SHOOT   |   TAP  CONFIRM / RESUME';
 }
+
+// ── AUDIO RESUME POLICY ───────────────────────────────────────────
+// Mobile browsers auto-suspend the AudioContext whenever the page loses
+// "audio focus" (volume-button presses, calls/notifications, app-switch,
+// screen lock, etc). The fix is intentionally narrow: browsers only honour
+// resume() calls made directly inside a user-gesture handler (a tap or key
+// press — see the `keydown`, `touchstart`, and `touchmove` handlers above,
+// each of which already calls `AC.resume()` when suspended). Calls made on
+// a timer or from visibility/focus events are often silently ignored by the
+// browser AND can fight its own audio-session management — which is exactly
+// what produces a "sometimes on, sometimes off, out of nowhere" flicker.
+// So: no polling, no background listeners — only resume from real input.
 
 // ── AUDIO RESUME POLICY ───────────────────────────────────────────
 // Mobile browsers auto-suspend the AudioContext whenever the page loses
@@ -280,6 +340,7 @@ function handleMenuKey(code, key) {
 
   } else if (gameState === 'TITLE' && code === 'KeyL') {
     sfxMenu(); gameState = 'LEADERBOARD'; loadLeaderboard();
+    sfxMenu(); gameState = 'LEADERBOARD'; loadLeaderboard();
 
   } else if (gameState === 'NAME') {
     if (code === 'Enter' && typingName.trim().length > 0) {
@@ -294,8 +355,10 @@ function handleMenuKey(code, key) {
 
   } else if (gameState === 'GAMEOVER' && (code === 'Enter' || code === 'Space')) {
     sfxMenu(); saveScore().then(() => { gameState = 'LEADERBOARD'; loadLeaderboard(); });
+    sfxMenu(); saveScore().then(() => { gameState = 'LEADERBOARD'; loadLeaderboard(); });
 
   } else if (gameState === 'WIN' && (code === 'Enter' || code === 'Space')) {
+    sfxMenu(); saveScore().then(() => { gameState = 'LEADERBOARD'; loadLeaderboard(); });
     sfxMenu(); saveScore().then(() => { gameState = 'LEADERBOARD'; loadLeaderboard(); });
 
   } else if (gameState === 'LEADERBOARD' && (code === 'Enter' || code === 'Space')) {
@@ -325,6 +388,12 @@ async function saveScore() {
   scores.sort((a, b) => b.score - a.score);
   scores = scores.slice(0, 10);
   localStorage.setItem('stoyanScores', JSON.stringify(scores));
+  try {
+    await firebase.database().ref('leaderboard').push({ name: playerName, score, date: Date.now() });
+  } catch (e) {}
+}
+
+let fetchAttempted = false;
   try {
     await firebase.database().ref('leaderboard').push({ name: playerName, score, date: Date.now() });
   } catch (e) {}
