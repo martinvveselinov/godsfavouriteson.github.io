@@ -1,0 +1,22 @@
+{
+  "shell": {
+    "allowed": [
+      "git status",
+      "git diff"
+    ],
+    "denied": [
+      "rm -rf",
+      "rm -fr",
+      "git push --force",
+      "git push -f",
+      "git reset --hard",
+      ":(){ :|:& };:",
+      "chmod -R 777",
+      "curl | sh",
+      "curl | bash",
+      "dd if=",
+      "mkfs"
+    ]
+  },
+  "allowlistMode": false
+}

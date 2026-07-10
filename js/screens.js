@@ -93,10 +93,18 @@ function drawPlaying() {
     ctx.fillRect(0, 0, W, H);
   }
 
+  // Everything from here until restore() is jostled by the screen shake.
+  ctx.save();
+  if (shake > 0) ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+
   ctx.strokeStyle = C_ORANGE + '22'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, H - 38); ctx.lineTo(W, H - 38); ctx.stroke();
 
-  enemies.forEach(e => ETYPES[e.type].draw(e));
+  enemies.forEach(e => {
+    ETYPES[e.type].draw(e);
+    if (e.charging) drawTelegraph(e);
+    if (e.isBoss && (e.telegraph > 0 || e.summoning > 0)) drawBossAura(e);
+  });
 
   eBullets.forEach(b => {
     const big = b.type === 'boss';
@@ -114,9 +122,14 @@ function drawPlaying() {
     ctx.shadowBlur = 0;
   });
 
+  drawWeaponDrops();
   drawParticles();
   player.draw();
+
+  ctx.restore();
+
   drawHUD();
+  drawFloaters();
 
   // Stage message
   if (waveMsg.timer > 0) {
@@ -145,11 +158,77 @@ function drawPlaying() {
   }
 }
 
+// Enemy sniper telegraph — pulsing ring + aim line while locking on.
+function drawTelegraph(e) {
+  const def = ETYPES[e.type];
+  const r   = def.w/2 + 6 + (1 - e.charge/46) * 5;
+  ctx.strokeStyle = C_YELLOW; ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.35 + (Math.sin(tick * 0.5) * 0.5 + 0.5) * 0.45;
+  ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI*2); ctx.stroke();
+  ctx.strokeStyle = C_YELLOW + '44'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(player.x, player.y); ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+// Boss telegraph — pulsing aura before a special (red "!") or a summon
+// (magenta ring), so heavy attacks are readable and dodgeable.
+function drawBossAura(e) {
+  const def    = ETYPES[e.type];
+  const summon = e.summoning > 0;
+  const col    = summon ? C_MAGENTA : C_RED;
+  const r      = def.w/2 + 14 + Math.sin(tick*0.4)*4;
+  ctx.strokeStyle = col; ctx.lineWidth = 3;
+  ctx.globalAlpha = 0.4 + (Math.sin(tick*0.6)*0.5 + 0.5)*0.5;
+  ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI*2); ctx.stroke();
+  ctx.globalAlpha = 1;
+  if (e.telegraph > 0) {
+    ctx.fillStyle = C_RED; ctx.font = 'bold 16px Courier New'; ctx.textAlign = 'center';
+    ctx.shadowColor = C_RED; ctx.shadowBlur = 10;
+    ctx.fillText('!', e.x, e.y - def.h/2 - 18); ctx.shadowBlur = 0;
+  }
+}
+
+// Falling weapon crates — rotating box with the weapon's initial.
+function drawWeaponDrops() {
+  weaponDrops.forEach(d => {
+    const wp = WEAPONS[d.wtype];
+    ctx.save();
+    ctx.translate(d.x, d.y); ctx.rotate(Math.sin(d.rot) * 0.3);
+    ctx.shadowColor = wp.col; ctx.shadowBlur = 12;
+    ctx.fillStyle = '#0a0a12'; ctx.strokeStyle = wp.col; ctx.lineWidth = 2;
+    ctx.fillRect(-13, -13, 26, 26); ctx.strokeRect(-13, -13, 26, 26);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = wp.col; ctx.font = 'bold 16px Courier New';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(wp.name[0], 0, 1);
+    ctx.restore();
+  });
+  ctx.textBaseline = 'alphabetic';
+}
+
+// Rising, fading pickup text.
+function drawFloaters() {
+  floaters.forEach(f => {
+    ctx.globalAlpha = Math.min(1, f.life / 25);
+    txt(f.text, f.x, f.y, 15, f.col, 'center', f.col);
+  });
+  ctx.globalAlpha = 1;
+}
+
 function drawHUD() {
   for (let i = 0; i < 3; i++) {
     ctx.font = '20px serif'; ctx.textAlign = 'left';
     ctx.fillStyle = i < player.lives ? C_RED : '#222';
     ctx.fillText('♥', 10 + i*26, 30);
+  }
+  // Active weapon + countdown bar
+  if (player.weaponTimer > 0) {
+    const wp = WEAPONS[player.weapon];
+    ctx.font = 'bold 11px Courier New'; ctx.textAlign = 'left';
+    ctx.fillStyle = wp.col; ctx.shadowColor = wp.col; ctx.shadowBlur = 6;
+    ctx.fillText(wp.name, 10, 52); ctx.shadowBlur = 0;
+    ctx.fillStyle = '#111'; ctx.fillRect(10, 58, 70, 4);
+    ctx.fillStyle = wp.col; ctx.fillRect(10, 58, 70 * (player.weaponTimer / wp.dur), 4);
   }
   ctx.font = '11px Courier New'; ctx.textAlign = 'center'; ctx.fillStyle = '#666';
   ctx.fillText(playerName, W/2, 18);

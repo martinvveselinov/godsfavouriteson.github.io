@@ -15,6 +15,10 @@ const C_RED     = '#ff2244';
 const C_PBULLET = '#ffff55';
 const C_EBULLET = '#ff2244';
 const C_SKIN    = '#c8906a';
+// Weapon power-up accents
+const C_CYAN    = '#22ddff';
+const C_GREEN   = '#33ff88';
+const C_MAGENTA = '#ff44dd';
 
 // Firebase leaderboard
 const firebaseConfig = {

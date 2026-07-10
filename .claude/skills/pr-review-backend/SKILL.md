@@ -1,0 +1,224 @@
+---
+name: pr-review-backend
+description: Review backend changes against architecture rules. Use when a PR or branch diff touches ./ — architecture violations, role enforcement, security, logging, imports, patterns, tests.
+---
+
+You are a senior backend code reviewer. Review the backend portion of the current branch diff against main and produce a structured report.
+
+**Binding rule set:** read `docs/architecture/backend-architecture.md` first — every rule there is a review criterion.
+**Engineering standards:** `docs/architecture/best-practices.md` — enforce the **Followed** items; surface relevant **Recommended** items under Suggestions.
+
+## Available MCP tools
+
+These MCP servers are configured for this project — use the ones relevant to the step:
+
+- **gitnexus** — code graph: impact, callers, route maps, blast radius before/after changes.
+- **git-memory** — why code changed: commit history, bug-fix history, file timelines.
+- **sentrux** — architectural quality gate: run `sentrux check .` and `sentrux gate .` to confirm the diff introduces no layer/cycle/coupling violations or quality regression.
+
+Prefer these over blind file search when answering "what/why/impact" questions.
+See `docs/architecture/mcp-tools.md` for exact tool names and signatures.
+
+## Test-driven development (enforced)
+
+This project follows **RED-first TDD**: a failing test is written and confirmed failing before the
+implementation that makes it pass. As a reviewer, enforce it — new business logic that ships without
+covering tests (happy path + failure paths) is a blocker, not a suggestion (see checklist §8).
+
+---
+
+
+## Step 0 — Plan first (mandatory)
+
+**Before reading any diff**, use Claude Code's built-in `/advisor` (a stronger planning model; falls back to the current session model if no advisor is configured) to produce a scoped review plan. Pass:
+- The changed backend files list (from `git diff origin/main...HEAD --stat -- ./`)
+- The scope of `$ARGUMENTS`
+- Any known risk areas (auth, audit, permissions)
+
+---
+
+## Step 1 — GitNexus impact analysis (mandatory before reading diffs)
+
+```
+gitnexus_detect_changes()              # what changed since last index?
+gitnexus_api_impact()                  # which HTTP endpoints are affected?
+gitnexus_impact("ChangedClassName")    # what else does this change break?
+```
+
+**Rules:**
+- Call `gitnexus_impact` on every symbol that was deleted or renamed.
+- If the index is stale, fall back to a Grep over the source tree for the symbol's references.
+
+---
+
+## Step 1.5 — Architectural quality gate (sentrux)
+
+```
+mcp__sentrux__scan({path: process.cwd()})   # MUST be first — indexes the project
+mcp__sentrux__check_rules()                  # validate .sentrux/rules.toml constraints
+mcp__sentrux__dsm()                          # dependency structure matrix — spot new cycles/coupling
+mcp__sentrux__session_end()                  # compare quality signal vs baseline saved at session_start
+```
+
+**Blockers:**
+- Any `check_rules` violation (cycle budget exceeded, coupling grade, CC threshold, god-file rule).
+- `session_end.pass == false` — the PR degraded the architecture signal; include `session_end.summary` in the blocker text.
+
+Do not proceed to Step 2 if either blocker is present. Report them under **Blockers** in the output.
+
+---
+
+## Step 2 — Historical context (git-memory)
+
+```
+commits_touching_file("path/to/file", limit=10)
+search_git_history("topic or bug description", limit=8)
+bug_fix_history("component name", limit=8)
+```
+Score > 0.7 = highly relevant — the diff may be reverting a deliberate fix.
+
+---
+
+## Step 3 — Gather scope
+
+1. `git diff origin/main...HEAD --stat -- ./`
+2. `git diff origin/main...HEAD -- ./`
+3. Cross-reference with `gitnexus_api_impact()`
+4. Read each changed file in full
+
+---
+
+## Severity scale (use for every finding)
+
+Assign one of the four levels to every finding before placing it in an output section:
+
+| Severity | Meaning | Output section |
+|---|---|---|
+| **critical** | data loss / security hole / breaks prod / corrupts state | Blockers |
+| **high** | real bug or regression a user/dev will hit | Blockers or Required changes |
+| **medium** | should fix, not blocking (smell, missing edge case) | Required changes |
+| **low** | nit / style / cosmetic | Suggestions |
+
+**False-positive check (mandatory for every finding):** before placing a finding in any section,
+read the actual lines and call sites in the current code to confirm the issue is real. If you
+cannot reproduce the defect from the actual code as it stands, mark it as a false positive
+(`falsePositive: true, fpReason: "<why>"`) and list it under a **Dropped as false positive**
+section — do NOT escalate it. Only confirmed findings are reported.
+
+## Checklist — work through every section
+
+> The criteria below are framework-agnostic; the wording assumes a layered web backend. Apply
+> only what fits this project's real architecture (per `backend-architecture.md`) — e.g. for a
+> CLI/library with no HTTP tier, skip the endpoint/role items and review the public API surface
+> instead. none-specific concerns (audit tables, none access in request
+> handlers, migrations) apply only on this stack.
+
+### 1. Architecture (layering)
+- Request handlers/controllers: only parse request, call service, return response. Flag business logic, none access, adapter calls.
+- Services: business logic only — no HTTP objects, no response objects, no raw none access.
+- Repositories: all data access lives here.
+- Services raise typed exceptions with integer status codes.
+
+### 2. Role enforcement
+- Every endpoint is protected. Check the authorization pattern.
+- Valid roles: none.
+- Fail-closed: unprotected endpoints must deny by default.
+
+### 3. Security
+- No dev-only auth in production configs.
+- No hardcoded secrets, connection strings, or API keys.
+- PII encrypted at rest — never raw in logs or responses.
+
+### 4. Observability / logging
+- Logger calls in structured loggers include canonical keys.
+- New log sites use helpers where they exist, not raw logger calls.
+- No PII constructed in log extra dicts.
+
+### 5. Audit immutability
+- No update/delete on audit tables.
+- Audit entries only via approved creation helpers.
+
+### 6. Import style
+- absolute imports only. Flag violations.
+
+### 7. Patterns
+- Every model field change has a migration.
+- New PII fields use encryption.
+- Auto timestamps on created_at fields.
+
+### 8. Tests
+- New business logic has unit tests.
+- Integration tests marked appropriately.
+- No commented-out asserts; no `skip(...)` without reason.
+
+### 9. Commit hygiene
+- Every commit message contains a ticket reference.
+- Format `type(scope): TICKET-XX description` (≤ 72 chars).
+
+### 10. Best-practice opportunities (non-blocking)
+- Compare the diff against the **Recommended** items in `docs/architecture/best-practices.md`.
+- Where the change could adopt a recommended standard (idempotency, tracing, repository
+  abstraction, migration discipline, …) note it — as a **suggestion**, never a blocker.
+
+---
+
+## Step 4 — Adversarial critic panel (sub-skills)
+
+After the checklist, run the five single-lens critic **sub-skills** against the **backend** diff.
+Each one tries to REFUTE the change from its own angle (not a balanced review). Spawn one Agent per
+critic, in parallel:
+
+> Read `.claude/skills/pr-critic-<lens>/SKILL.md` and execute it exactly on the backend diff
+> (`git diff origin/main...HEAD -- ./`). `$ARGUMENTS` = `<scope>`. Return ONLY your
+> `{severity, file, line, problem, fix, falsePositive, fpReason?}` findings.
+
+Lenses: `pr-critic-security`, `pr-critic-performance`, `pr-critic-simplicity`,
+`pr-critic-maintainability`, `pr-critic-dx`.
+
+### Synthesis (consensus, not raw dump)
+
+After the critics return, consolidate — do NOT dump every critic verbatim:
+
+**Step A — False-positive triage (first, always):** drop every finding where `falsePositive: true`;
+list them under **Dropped as false positive** with each `fpReason` for human audit. Dropped findings
+are not counted toward the verdict and not auto-fixed.
+
+**Step B — Severity-driven handling of confirmed findings:**
+1. **Dedup** confirmed findings pointing at the same file/line across lenses.
+2. **Rank** by severity; a finding flagged by ≥2 lenses is high-confidence-real — surface first.
+3. **critical / high** → fold into **Blockers** (and auto-fix when confident and run standalone).
+4. **medium / low** → list under **Required changes** / **Suggestions**; never block the verdict.
+5. A lone single-lens finding with no corroboration is **medium** at most.
+
+---
+
+## Output format
+
+```
+## Backend Review Summary
+One-paragraph verdict: mergeable / needs changes / blocked.
+
+## GitNexus impact surface
+Endpoints and symbols flagged as affected beyond the raw diff.
+
+## Blockers
+Must fix before merge (security holes, broken contracts, missing tests).
+- **[sentrux]** check_rules violations or session_end.pass==false (architecture degraded).
+
+## Required changes
+Should fix (arch violations, missing codes, test gaps).
+
+## Suggestions
+Non-blocking improvements.
+
+## Critic panel (synthesized)
+Confirmed critic findings folded in by severity (critical/high under Blockers; medium/low under Required/Suggestions), with cross-lens corroboration noted.
+
+## Dropped as false positive
+Findings confirmed as false positives, with reason (fpReason) for each — from both the review and the critic panel — listed here for human audit; not counted toward verdict, not auto-fixed.
+
+## Approved sections
+What looks correct.
+```
+
+Be specific: include `file_path:line_number` for every finding.

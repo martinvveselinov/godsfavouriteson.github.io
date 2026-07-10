@@ -40,18 +40,29 @@ const ETYPES = {
 
   // ── BOSS: TOSHO KUKATA ─────────────────────────────────────────
   tosho: {
-    hp:40, pts:80, w:50, h:58, col:'#1e7a48',
+    hp:35, pts:80, w:50, h:58, col:'#1e7a48',
+    summon: { types:['delta','kurva'], interval:330, cap:2, count:2, budget:10 },
+    specialEvery:280,
+    special(e) {
+      // Alternate a radial cleaver-fan with an aimed 5-shot volley
+      e.specialIx = (e.specialIx||0) + 1;
+      if (e.specialIx % 2) bossRing(e, 12, 2.6); else bossVolley(e, 5, 3.2);
+      sfxSniper();
+    },
     bossMove(e) {
       e.bossTimer++;
-      e.x = W/2 + Math.sin(e.bossTimer*0.022)*(W/2-100);
+      // Sway faster and dip lower when enraged — crowds the player
+      const spd = 0.022 * (e.rage||1);
+      e.x = W/2 + Math.sin(e.bossTimer*spd)*(W/2-100);
       e.y = 170 + Math.sin(e.bossTimer*0.014)*40;
     },
     shoot(e) {
       if (e.state==='entering') return;
-      if (Math.random() < 0.008) {
+      // Frequent and aimed — active without being oppressive
+      if (Math.random() < 0.016*(e.rage||1)) {
         const a = Math.atan2(player.y-e.y, player.x-e.x);
-        eBullets.push({x:e.x,y:e.y+26,vx:Math.cos(a)*2.8,vy:Math.abs(Math.sin(a))*2.8+1,type:'hook',life:180});
-        eBullets.push({x:e.x,y:e.y+26,vx:0,vy:3.2,type:'n'});
+        eBullets.push({x:e.x,y:e.y+26,vx:Math.cos(a)*3.0,vy:Math.abs(Math.sin(a))*3.0+1,type:'hook',life:180});
+        eBullets.push({x:e.x,y:e.y+26,vx:Math.cos(a)*2.2,vy:Math.abs(Math.sin(a))*2.2+2.2,type:'n',life:200});
       }
     },
     draw(e) {
@@ -64,6 +75,9 @@ const ETYPES = {
   // ── BOSS: YAN KICK ─────────────────────────────────────────────
   yankick: {
     hp:80, pts:120, w:52, h:62, col:'#cc1100',
+    summon: { types:['kurva'], interval:300, cap:2, count:2, budget:10 },
+    specialEvery:220,
+    special(e) { bossVolley(e, 3, 4.2); bossVolley(e, 3, 3.0); sfxSniper(); },
     bossMove(e) {
       e.bossTimer++;
       const t = e.bossTimer;
@@ -105,6 +119,9 @@ const ETYPES = {
   // ── BOSS: JAKUZA ──────────────────────────────────────────────
   jakuza: {
     hp:100, pts:150, w:72, h:80, col:'#222244',
+    summon: { types:['delta'], interval:360, cap:3, count:2, budget:12 },
+    specialEvery:290,
+    special(e) { bossRing(e, 10, 2.4); sfxSniper(); },
     bossMove(e) {
       e.bossTimer++;
       e.x += e.vx;
@@ -130,6 +147,9 @@ const ETYPES = {
   // ── BOSS: ANDREY INKED ────────────────────────────────────────
   inked: {
     hp:60, pts:110, w:46, h:56, col:'#ff44bb',
+    summon: { types:['kurva'], interval:300, cap:2, count:2, budget:10 },
+    specialEvery:210,
+    special(e) { bossVolley(e, 5, 4.0); sfxSniper(); },
     bossMove(e) {
       e.bossTimer++;
       if (e.bossTimer%32===0) {
@@ -160,6 +180,9 @@ const ETYPES = {
   // ── BOSS: DJOKOV ──────────────────────────────────────────────
   jokov: {
     hp:100, pts:140, w:54, h:62, col:'#2244bb',
+    summon: { types:['delta','kurva'], interval:340, cap:3, count:2, budget:12 },
+    specialEvery:270,
+    special(e) { bossRing(e, 14, 3.0); sfxSniper(); },
     bossMove(e) {
       e.bossTimer++;
       if (!e.charging) {
@@ -202,6 +225,13 @@ const ETYPES = {
   // ── BOSS: YOVKO TIHOV ─────────────────────────────────────────
   yovko: {
     hp:280, pts:400, w:80, h:84, col:'#990000',
+    summon: { types:['kurva','delta'], interval:280, cap:3, count:2, budget:12 },
+    specialEvery:200,
+    special(e) {
+      e.specialIx = (e.specialIx||0) + 1;
+      if (e.specialIx % 2) bossRing(e, 16, 3.0); else bossVolley(e, 7, 3.6);
+      sfxSniper();
+    },
     bossMove(e) {
       e.bossTimer++;
       const phase = e.hp<140 ? 2 : 1;
@@ -255,6 +285,98 @@ function bossHpBar(e, bw, col, label) {
 }
 
 function diffMult() { return 1 + currentStage*0.04; }
+
+// ── BOSS AGGRESSION LAYER ─────────────────────────────────────────
+// Bosses used to just drift and take pot-shots. tickBossAI() runs every
+// frame during boss_fight and layers three behaviours on top of each boss's
+// own shoot():
+//   • MINION SUMMONS — periodically spits swarm enemies at the player. They
+//     fight (and drop loot) normally, so they double as bonus piñatas — a
+//     way to re-arm mid-boss.
+//   • SPECIAL ATTACK — a telegraphed heavy bullet pattern on a cooldown.
+//   • RAGE — 1 → ~1.9 as HP drops; summons come faster, specials fire sooner.
+// Per-boss knobs live in ETYPES: `summon`, `special`, `specialEvery`.
+
+// Shared bullet patterns bosses can fire as their special.
+function bossRing(e, n, spd) {
+  for (let i = 0; i < n; i++) {
+    const a = (Math.PI*2/n)*i + e.frame*0.02;
+    eBullets.push({ x:e.x, y:e.y, vx:Math.cos(a)*spd, vy:Math.sin(a)*spd*0.7 + 0.8, type:'boss', life:230 });
+  }
+}
+function bossVolley(e, count, spd) {
+  const a = Math.atan2(player.y - e.y, player.x - e.x);
+  for (let i = -(count-1)/2; i <= (count-1)/2; i++)
+    eBullets.push({ x:e.x, y:e.y+20, vx:Math.cos(a)*spd + i*0.9, vy:Math.abs(Math.sin(a))*spd + 1.2, type:'boss', life:220 });
+}
+
+// Spawn one swarm minion bursting out of the boss, already diving at you.
+function summonMinion(e) {
+  const cfg  = ETYPES[e.type].summon;
+  const type = cfg.types[Math.floor(Math.random()*cfg.types.length)];
+  const m = createEnemy({ type, col: Math.floor(Math.random()*5), row: 0, totalCols: 5 });
+  m.x = e.x; m.y = e.y + 16;
+  m.state = 'diving';
+  m.diveAngle = Math.atan2(player.y - m.y, player.x - m.x);
+  m.diveSpd = 3.0; m.divePhase = 0;
+  enemies.push(m);
+  spawnParticles(e.x, e.y + 16, ETYPES[type].col, 8);
+}
+
+function tickBossAI(e) {
+  const def = ETYPES[e.type];
+  e.rage = 1 + (1 - e.hp/def.hp) * 0.5;
+
+  // Minion summoning — capped both by how many are alive at once (`cap`) and
+  // by a lifetime `budget` for the whole fight, so it never spawns forever.
+  if (def.summon) {
+    e.summonTimer = (e.summonTimer||0) + e.rage;
+    const alive     = enemies.filter(en => !en.isBoss && en.state !== 'ambush_dash').length;
+    const remaining = def.summon.budget - (e.summonedTotal||0);
+    if (e.summonTimer >= def.summon.interval && alive < def.summon.cap && remaining > 0) {
+      e.summonTimer = 0; e.summoning = 16;
+      const n = Math.min(def.summon.count, def.summon.cap - alive, remaining);
+      for (let i = 0; i < n; i++) summonMinion(e);
+      e.summonedTotal = (e.summonedTotal||0) + n;
+      sfxBoss();
+    }
+  }
+  if (e.summoning > 0) e.summoning--;
+
+  // Telegraphed special attack
+  if (def.special) {
+    if (e.telegraph > 0) {
+      if (--e.telegraph === 0) def.special(e);
+    } else {
+      e.specialCD = (e.specialCD == null ? (def.specialEvery||220) : e.specialCD) - e.rage;
+      if (e.specialCD <= 0) { e.specialCD = def.specialEvery||220; e.telegraph = 22; sfxCharge(); }
+    }
+  }
+}
+
+// ── ENEMY SPECIAL MOVE: SNIPER BURST ──────────────────────────────
+// Any swarm enemy in formation can occasionally "lock on": it flashes a
+// telegraph ring + aim line (drawn in screens.js) for ~0.8s, then fires a
+// tight aimed 3-shot straight at the player's position. Telegraphed on
+// purpose so it's dodgeable — it adds tension without being cheap.
+function tickEnemySpecial(e) {
+  if (e.isBoss) return;
+  if (e.charging) {
+    if (--e.charge <= 0) {
+      e.charging = false;
+      const a = Math.atan2(player.y - e.y, player.x - e.x);
+      [-0.22, 0, 0.22].forEach(da =>
+        eBullets.push({ x:e.x, y:e.y+18, vx:Math.cos(a+da)*4.2, vy:Math.sin(a+da)*4.2, type:'boss', life:230 })
+      );
+      sfxSniper(); spawnParticles(e.x, e.y, C_YELLOW, 7);
+    }
+    return;
+  }
+  if (e.state === 'formation' && spawnQueue.length === 0 &&
+      Math.random() < 0.0006 * diffMult()) {
+    e.charging = true; e.charge = 46; sfxCharge();
+  }
+}
 
 // ── SHARED STATE ──────────────────────────────────────────────────
 let enemies  = [];
@@ -316,6 +438,7 @@ function moveEnemy(e) {
 
   if (e.state==='diving') {
     e.divePhase++;
+    if (e.frame%3===0) spawnParticles(e.x, e.y, ETYPES[e.type].col, 1); // dive trail
     const spd = e.diveSpd;
     if (e.type==='kurva') {
       e.x += Math.cos(e.diveAngle)*spd + Math.sin(e.divePhase*0.3)*4;
@@ -364,6 +487,10 @@ function createEnemy(spec) {
       comboTimer:0, comboCount:0,
       charging:false, chargeAngle:0, chargeTimer:0,
       shootAngle:0,
+      // Boss aggression layer (tickBossAI)
+      rage:1, summonTimer:0, summoning:0, summonedTotal:0, specialCD:null, telegraph:0, specialIx:0,
+      // Damage-based loot bleed
+      dmgSinceLoot:0, lootThreshold:null,
     };
   }
   const {type,col,row,totalCols} = spec;
@@ -377,5 +504,6 @@ function createEnemy(spec) {
     hp:ETYPES[type].hp, pts:ETYPES[type].pts,
     frame:Math.floor(Math.random()*30),
     divePhase:0, diveAngle:0, diveSpd:4,
+    charging:false, charge:0,
   };
 }

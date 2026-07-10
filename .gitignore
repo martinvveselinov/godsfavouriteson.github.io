@@ -1,0 +1,3 @@
+
+# agent-smith MCP config — may contain credentials/private paths, never commit
+.mcp.json

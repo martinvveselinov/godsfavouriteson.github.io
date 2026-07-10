@@ -16,6 +16,22 @@ let onlineScores = null;
 
 // Health drops (hearts from killed enemies during healing stages)
 let healthDrops  = [];
+// Weapon power-up crates falling from killed enemies
+let weaponDrops  = [];
+// Short-lived floating text (e.g. "SPREAD!" on pickup)
+let floaters     = [];
+// Screen-shake magnitude in px, decays each tick (juice on hits/pickups)
+let shake        = 0;
+
+const WEAPON_POOL = ['spread', 'rapid', 'twin', 'pierce'];
+function mkWeaponDrop(x, y) {
+  return { x, y, vy: 1.1 + Math.random() * 0.5, rot: 0,
+           wtype: WEAPON_POOL[Math.floor(Math.random() * WEAPON_POOL.length)] };
+}
+function addFloater(text, x, y, col) { floaters.push({ text, x, y, life: 70, col }); }
+// Damage a boss must soak before it bleeds the next loot crate — randomized
+// each time so drops are "damage + luck", never a predictable metronome.
+function bossLootThreshold() { return 12 + Math.random() * 9; }
 
 // ── INPUT ─────────────────────────────────────────────────────────
 const keys = {};
@@ -191,6 +207,9 @@ function startGame() {
   score        = 0;
   particles    = [];
   healthDrops  = [];
+  weaponDrops  = [];
+  floaters     = [];
+  shake        = 0;
   spawnQueue   = [];
   waveActive   = false;
   player.reset();
@@ -228,6 +247,55 @@ async function fetchOnlineScores() {
   return onlineScores;
 }
 
+// ── APPLY DAMAGE / HANDLE A KILL ──────────────────────────────────
+// Shared by every player-bullet hit. On a kill it scores, plays the death
+// clip, and rolls loot: a heart (heavy during healing waves) OR a weapon
+// crate. Boss fights are weapon-rich — the boss showers crates on death and
+// its summoned minions drop them far more often — so you can re-arm mid-fight.
+function damageEnemy(e, idx, dmg, isHealing) {
+  const def = ETYPES[e.type];
+  e.hp -= dmg;
+  spawnParticles(e.x, e.y, def.col, e.hp <= 0 ? 14 : 5);
+  playHitClip(e.type); // per-boss hit clip on every connecting hit
+
+  // Damage-based loot (bosses): they bleed crates as you chip their HP, on a
+  // randomized damage threshold — so you re-arm throughout the fight, not only
+  // at the kill. Drops a heart instead when you're hurting.
+  if (e.isBoss && e.hp > 0) {
+    e.dmgSinceLoot = (e.dmgSinceLoot || 0) + dmg;
+    if (e.lootThreshold == null) e.lootThreshold = bossLootThreshold();
+    if (e.dmgSinceLoot >= e.lootThreshold) {
+      e.dmgSinceLoot = 0;
+      e.lootThreshold = bossLootThreshold();
+      if (player.lives < 3 && Math.random() < 0.35)
+        healthDrops.push({ x: e.x, y: e.y + 20, vy: 1.4 });
+      else
+        weaponDrops.push(mkWeaponDrop(e.x + (Math.random()-0.5)*40, e.y + 20));
+    }
+  }
+
+  if (e.hp > 0) return;
+
+  score += e.pts;
+  if (!playKillClip(e.type)) sfxDeath();
+
+  const stageType = STAGES[currentStage]?.type || '';
+  const bossStage = stageType === 'boss' || stageType === 'final_boss';
+
+  if (e.isBoss) {
+    shake = 16;
+    // Death shower — a fistful of weapon crates fans out from the corpse
+    for (let i = 0; i < 4; i++)
+      weaponDrops.push(mkWeaponDrop(e.x + (Math.random()-0.5)*70, e.y + (Math.random()-0.5)*20));
+  } else if (Math.random() < (isHealing ? 0.35 : 0.08)) {
+    healthDrops.push({ x: e.x, y: e.y, vy: 1.2 + Math.random() * 0.6 });
+  } else if (!isHealing && Math.random() < (bossStage ? 0.30 : 0.05)) {
+    // Minions in a boss fight are generous with weapons; normal swarms aren't
+    weaponDrops.push(mkWeaponDrop(e.x, e.y));
+  }
+  enemies.splice(idx, 1);
+}
+
 // ── MAIN UPDATE LOOP ──────────────────────────────────────────────
 function update() {
   tick++;
@@ -253,7 +321,10 @@ function update() {
   enemies.forEach(e => {
     e.frame++;
     moveEnemy(e);
-    if (e.state !== 'ambush_dash') ETYPES[e.type].shoot(e);
+    if (e.state === 'ambush_dash') return;
+    if (e.state === 'boss_fight') tickBossAI(e); // summons, specials, rage
+    tickEnemySpecial(e);                          // sniper telegraph / burst
+    if (!e.charging) ETYPES[e.type].shoot(e);     // hold normal fire while locking on
   });
 
   // Remove ambush Yovko when off screen
@@ -270,34 +341,27 @@ function update() {
 
   updateParticles();
   if (screenFlash > 0) screenFlash--;
+  if (shake > 0) shake--;
+  floaters = floaters.filter(f => { f.y -= 0.6; return --f.life > 0; });
 
-  // Player bullets vs enemies
+  // Player bullets vs enemies. A normal bullet is consumed on its first hit;
+  // a piercing blade damages several enemies (tracked in `bul.hits` so it
+  // never re-hits the same one) until its `pierce` budget is spent.
   const isHealing = STAGES[currentStage]?.type === 'healing';
   player.bullets = player.bullets.filter(bul => {
-    let hit = false;
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e   = enemies[i];
       if (e.state === 'ambush_dash') continue; // can't shoot Yovko during ambush
       const def = ETYPES[e.type];
       if (Math.abs(bul.x - e.x) < def.w/2 + 2 && Math.abs(bul.y - e.y) < def.h/2 + 2) {
-        e.hp--;
-        spawnParticles(e.x, e.y, def.col, e.hp <= 0 ? 14 : 5);
-        if (e.hp <= 0) {
-          score += e.pts;
-          // Custom kill clip per enemy type (falls back to sfxDeath if none supplied)
-          if (!playKillClip(e.type)) sfxDeath();
-          // Health drop during healing waves (35% chance, 15% other stages)
-          if (Math.random() < (isHealing ? 0.35 : 0.08)) {
-            healthDrops.push({ x: e.x, y: e.y, vy: 1.2 + Math.random() * 0.6 });
-          }
-          enemies.splice(i, 1);
-        }
-        // Custom per-boss hit clip (plays on every connecting hit, not just kills)
-        playHitClip(e.type);
-        sfxHit(); hit = true; break;
+        if (bul.hits && bul.hits.includes(e)) continue; // already pierced this one
+        damageEnemy(e, i, bul.dmg || 1, isHealing);
+        sfxHit();
+        if (bul.pierce > 0) { bul.pierce--; bul.hits.push(e); continue; }
+        return false; // consumed
       }
     }
-    return !hit;
+    return true;
   });
 
   // Health drops
@@ -310,6 +374,20 @@ function update() {
       return false;
     }
     return h.y < H + 30;
+  });
+
+  // Weapon crates — fall, and on pickup swap in a timed weapon
+  weaponDrops = weaponDrops.filter(d => {
+    d.y += d.vy; d.rot += 0.05;
+    if (Math.abs(d.x - player.x) < 26 && Math.abs(d.y - player.y) < 26) {
+      const wp = WEAPONS[d.wtype];
+      player.weapon = d.wtype; player.weaponTimer = wp.dur;
+      spawnParticles(d.x, d.y, wp.col, 18);
+      addFloater(wp.name + '!', player.x, player.y - 40, wp.col);
+      sfxPower(); shake = 8;
+      return false;
+    }
+    return d.y < H + 30;
   });
 
   // Enemy bullets vs player
