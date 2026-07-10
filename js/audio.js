@@ -39,25 +39,6 @@ function beep(freq, dur, type = 'square', vol = 0.18) {
 // resume calls in game.js — and overlapping plays come for free via
 // createBufferSource() (each start() spins up its own one-shot node, no
 // cloning needed).
-// ── REAL AUDIO-FILE CLIPS (kill clips + boss hit clips) ───────────
-// IMPORTANT: these are decoded into AudioBuffers and played through the SAME
-// AudioContext as the synthesized beeps above — deliberately NOT via
-// `new Audio()` / <audio> elements.
-//
-// Why: mobile browsers enforce a SECOND, totally independent autoplay/unlock
-// policy for HTMLMediaElement playback, separate from AudioContext. The old
-// `clip.cloneNode().play()` approach created a brand-new, never-unlocked
-// <audio> element on every single play — and each fresh clone needs its own
-// gesture-context unlock before .play() will succeed. That's exactly why
-// these clips only played while constantly tapping (each tap happened to
-// supply a gesture window for that particular clone) while the AudioContext
-// beeps played fine (they ride on the gesture-driven AC.resume() calls).
-//
-// Routing everything through one AudioContext means there's only one autoplay
-// policy to satisfy — the same one already covered by the gesture-driven
-// resume calls in game.js — and overlapping plays come for free via
-// createBufferSource() (each start() spins up its own one-shot node, no
-// cloning needed).
 const KILL_CLIPS_SRC = {
   kurva: ['sounds/kurva_kill.m4a'],
   delta: ['sounds/delta_kill.m4a'],
@@ -98,9 +79,6 @@ function playClip(store, type) {
   } catch (e) { return false; }
   return true;
 }
-
-const playKillClip = type => playClip(KILL_CLIPS, type);
-const playHitClip  = type => playClip(HIT_CLIPS,  type);
 
 const playKillClip = type => playClip(KILL_CLIPS, type);
 const playHitClip  = type => playClip(HIT_CLIPS,  type);
